@@ -8,25 +8,26 @@ import numpy as np
 import math
 
 from utils.utils import build_targets, to_cpu, parse_model_config
+####parse_model_config : Parses the yolo-v3 layer configuration file and returns module definitions"
 
 def create_modules(module_defs):
     """
     Constructs module list of layer blocks from module configuration in module_defs
     """
-    hyperparams = module_defs.pop(0)
-    output_filters = [int(hyperparams["channels"])]
+    hyperparams = module_defs.pop(0)   # cfg training hyperparams (unused) --> #training 부분 가져오기
+    output_filters = [int(hyperparams["channels"])]  #input channel의미
     module_list = nn.ModuleList()
     for module_i, module_def in enumerate(module_defs):
         modules = nn.Sequential()
 
-        if module_def["type"] == "convolutional":
+        if module_def["type"] == "convolutional":    ###각각 layer마다 가져오기
             bn = int(module_def["batch_normalize"])
             filters = int(module_def["filters"])
             kernel_size = int(module_def["size"])
             pad = (kernel_size - 1) // 2
             modules.add_module(
-                f"conv_{module_i}",
-                nn.Conv2d(
+                f"conv_{module_i}",                       #하위 모듈의 이름 : "conv_{module_i} / 
+                nn.Conv2d(                                #--------> 더 해지는 모듈
                     in_channels=output_filters[-1],
                     out_channels=filters,
                     kernel_size=kernel_size,
@@ -63,7 +64,7 @@ def create_modules(module_defs):
 
         elif module_def["type"] == "yolo":
             anchor_idxs = [int(x) for x in module_def["mask"].split(",")]
-            # Extract anchors
+            # Extract anchors      ----->   배분하기
             anchors = [float(x) for x in module_def["anchors"].split(",")]
             anchors = [(anchors[i], anchors[i + 1], math.sin(anchors[i + 2]), math.cos(anchors[i + 2])) for i in range(0, len(anchors), 3)]
             anchors = [anchors[i] for i in anchor_idxs]
@@ -110,8 +111,8 @@ class YOLOLayer(nn.Module):
         self.ignore_thres = 0.5
         self.mse_loss = nn.MSELoss()
         self.bce_loss = nn.BCELoss()
-        self.obj_scale = 1
-        self.noobj_scale = 100
+        self.obj_scale = 1              ######손실 함수 모수[논문 참조]
+        self.noobj_scale = 100          ######손실함수 모수
         self.metrics = {}
         self.img_dim = img_dim
         self.grid_size = 0  # grid size
@@ -122,8 +123,8 @@ class YOLOLayer(nn.Module):
         FloatTensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
         self.stride = self.img_dim / self.grid_size
         # Calculate offsets for each grid
-        self.grid_x = torch.arange(g).repeat(g, 1).view([1, 1, g, g]).type(FloatTensor)
-        self.grid_y = torch.arange(g).repeat(g, 1).t().view([1, 1, g, g]).type(FloatTensor)
+        self.grid_x = torch.arange(g).repeat(g, 1).view([1, 1, g, g]).type(FloatTensor)        # tensor([], size=(1, 1, 0, 0), dtype=torch.int64)
+        self.grid_y = torch.arange(g).repeat(g, 1).t().view([1, 1, g, g]).type(FloatTensor)    #tensor([], size=(1, 1, 0, 0), dtype=torch.int64)
         self.scaled_anchors = FloatTensor([(a_w / self.stride, a_h / self.stride, im, re) for a_w, a_h, im, re in self.anchors])
         self.anchor_w = self.scaled_anchors[:, 0:1].view((1, self.num_anchors, 1, 1))
         self.anchor_h = self.scaled_anchors[:, 1:2].view((1, self.num_anchors, 1, 1))
@@ -190,7 +191,7 @@ class YOLOLayer(nn.Module):
                 ignore_thres=self.ignore_thres,
             )
 
-            # Loss : Mask outputs to ignore non-existing objects (except with conf. loss)
+            # Loss : Mask outputs to ignore non-existing objects (except with conf. loss)  손실 함수 부분
             loss_x = self.mse_loss(x[obj_mask], tx[obj_mask])
             loss_y = self.mse_loss(y[obj_mask], ty[obj_mask])
             loss_w = self.mse_loss(w[obj_mask], tw[obj_mask])
@@ -245,8 +246,8 @@ class Darknet(nn.Module):
         super(Darknet, self).__init__()
         self.module_defs = parse_model_config(config_path)
         self.hyperparams, self.module_list = create_modules(self.module_defs)
-        self.yolo_layers = [layer[0] for layer in self.module_list if hasattr(layer[0], "metrics")]
-        self.img_size = img_size
+        self.yolo_layers = [layer[0] for layer in self.module_list if hasattr(layer[0], "metrics")]      #hasattr(object, name) : object의 속성(attribute) 존재를 확인한다.
+        self.img_size = img_size                               
         self.seen = 0
         self.header_info = np.array([0, 0, 0, self.seen, 0], dtype=np.int32)
 
